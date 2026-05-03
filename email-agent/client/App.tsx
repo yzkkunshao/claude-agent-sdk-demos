@@ -29,8 +29,9 @@ const App: React.FC = () => {
   }, [componentTabs]);
 
   // Single WebSocket connection for all components
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
   const { isConnected, sendMessage, ws } = useWebSocket({
-    url: 'ws://localhost:3000/ws',
+    url: wsUrl,
     onMessage: (message) => {
       switch (message.type) {
         case 'inbox_update':
