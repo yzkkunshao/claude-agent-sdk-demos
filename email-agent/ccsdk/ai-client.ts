@@ -3,7 +3,7 @@ import type { HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import * as path from "path";
 import { EMAIL_AGENT_PROMPT } from "./email-agent-prompt";
 import { customServer } from "./custom-tools";
-import type { SDKMessage, SDKUserMessage } from "./types";
+import type { SDKMessage } from "./types";
 
 export interface AIQueryOptions {
   maxTurns?: number;
@@ -78,7 +78,7 @@ export class AIClient {
   }
 
   async *queryStream(
-    prompt: string | AsyncIterable<SDKUserMessage>,
+    prompt: string,
     options?: Partial<AIQueryOptions>
   ): AsyncIterable<SDKMessage> {
     const mergedOptions = { ...this.defaultOptions, ...options };

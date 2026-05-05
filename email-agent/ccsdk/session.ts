@@ -1,15 +1,13 @@
 import { Database } from "bun:sqlite";
 import * as path from "path";
-import { MessageQueue } from "./message-queue";
-import type { WSClient, SDKUserMessage, SDKMessage } from "./types";
+import type { WSClient, SDKMessage } from "./types";
 import { AIClient } from "./ai-client";
 
 // Session class to manage a single Claude conversation
 export class Session {
   public readonly id: string;
-  private messageQueue: MessageQueue<SDKUserMessage>;
   private queryPromise: Promise<void> | null = null;
-  private subscribers: Set<WSClient> = new Set();
+  private subscribers: Set<WSClient> = new Set(); //订阅此会话的WSClient集合
   private db: Database;
   private messageCount = 0;
   private aiClient: AIClient;
@@ -18,7 +16,6 @@ export class Session {
   constructor(id: string, db: Database) {
     this.id = id;
     this.db = db;
-    this.messageQueue = new MessageQueue();
     this.aiClient = new AIClient();
   }
 
@@ -84,7 +81,7 @@ export class Session {
     this.subscribers.delete(client);
   }
 
-  // Broadcast a message to all subscribers
+  // 路由Broadcast a message to all subscribers
   private broadcastToSubscribers(message: SDKMessage) {
     let wsMessage: any = null;
 
@@ -195,7 +192,6 @@ export class Session {
 
   // Clean up session
   async cleanup() {
-    this.messageQueue.close();
     this.subscribers.clear();
   }
 
