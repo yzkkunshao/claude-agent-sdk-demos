@@ -91,6 +91,7 @@ export class AIClient {
     }
   }
 
+  // TODO 死代码
   async querySingle(prompt: string, options?: Partial<AIQueryOptions>): Promise<{
     messages: SDKMessage[];
     cost: number;

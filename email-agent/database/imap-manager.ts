@@ -47,7 +47,7 @@ export class ImapManager {
       host: config?.host || process.env.IMAP_HOST || "imap.gmail.com",
       port: config?.port || parseInt(process.env.IMAP_PORT || "993"),
       tls: config?.tls !== undefined ? config.tls : true,
-      tlsOptions: config?.tlsOptions || { servername: config?.host || "imap.gmail.com" },
+      tlsOptions: config?.tlsOptions || { servername: config?.host || process.env.IMAP_HOST || "imap.gmail.com" },
       connTimeout: config?.connTimeout || 30000,  // Reduced from 120s to 30s
       authTimeout: config?.authTimeout || 30000,  // Reduced from 60s to 30s
       keepalive: config?.keepalive !== undefined ? config.keepalive : {
@@ -73,7 +73,7 @@ export class ImapManager {
     if (this.connectionPromise) {
       return this.connectionPromise;
     }
-
+    // node-imap 是 EventEmitter 风格的 API 这里用new Promise进行包裹方便改为await调用
     this.connectionPromise = new Promise((resolve, reject) => {
       // Set a timeout for connection
       const timeout = setTimeout(() => {

@@ -196,13 +196,13 @@ export class WebSocketHandler {
         case 'chat': {
           // Handle chat message
           const session = this.getOrCreateSession(data.sessionId);
-
+          // TODO sessionId在getOrCreateSession中初始化
           // Auto-subscribe the sender to the session
           if (!ws.data.sessionId || ws.data.sessionId !== session.id) {
             session.subscribe(ws);
           }
 
-          // Check if this is a request to start a new conversation
+          //FIXME 从未被前端调用的死代码，Check if this is a request to start a new conversation
           if (data.newConversation) {
             session.endConversation();
           }

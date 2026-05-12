@@ -53,13 +53,16 @@ export class EmailSearcher {
 
       // Debug: Check credentials are loaded (removed sensitive logging)
 
+      const IMAP_HOST = process.env.IMAP_HOST || "imap.gmail.com";
+      const IMAP_PORT = parseInt(process.env.IMAP_PORT || "993");
+
       this.imapConfig = {
         user: EMAIL,
         password: APP_PASSWORD,
-        host: "imap.gmail.com",
-        port: 993,
+        host: IMAP_HOST,
+        port: IMAP_PORT,
         tls: true,
-        tlsOptions: { servername: "imap.gmail.com" },
+        tlsOptions: { servername: IMAP_HOST },
         connTimeout: 60000, // 60 seconds
         authTimeout: 30000, // 30 seconds
         keepalive: true,

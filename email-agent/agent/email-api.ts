@@ -38,7 +38,7 @@ interface SearchCriteria {
 class EmailAPI {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:3000') {
+  constructor(baseUrl: string = 'http://0.0.0.0:3000') {
     this.baseUrl = baseUrl;
   }
 
