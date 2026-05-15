@@ -77,16 +77,16 @@ export async function handleSearchEndpoint(req: Request): Promise<Response> {
           criteria.from = userEmail;
         }
         if (!criteria.folders || criteria.folders.length === 0) {
-          criteria.folders = ['[Gmail]/Sent Mail', '[Gmail]/All Mail'];
-          console.log(`[${new Date().toISOString()}] 📨 Auto-including Sent Mail folders for from:me search`);
+          criteria.folders = ['Sent', 'INBOX'];
+          console.log(`[${new Date().toISOString()}] 📨 Auto-including Sent folder for from:me search`);
         }
       }
     }
 
     if (criteria.gmailQuery && criteria.gmailQuery.includes('from:me')) {
       if (!criteria.folders || criteria.folders.length === 0) {
-        criteria.folders = ['[Gmail]/Sent Mail', '[Gmail]/All Mail'];
-        console.log(`[${new Date().toISOString()}] 📨 Auto-including Sent Mail folders for gmailQuery with from:me`);
+        criteria.folders = ['Sent', 'INBOX'];
+        console.log(`[${new Date().toISOString()}] 📨 Auto-including Sent folder for gmailQuery with from:me`);
       }
     }
 

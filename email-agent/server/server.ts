@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { WebSocketHandler } from "../ccsdk/websocket-handler";
 import type { WSClient } from "../ccsdk/types";
-import { Database } from "bun:sqlite";
+
 import { EmailSyncService } from "../database/email-sync";
 import { DATABASE_PATH } from "../database/config";
 import { DatabaseManager } from "../database/database-manager";
@@ -11,8 +11,7 @@ import { ActionsManager } from "../ccsdk/actions-manager";
 import { UIStateManager } from "../ccsdk/ui-state-manager";
 import { ComponentManager } from "../ccsdk/component-manager";
 import {
-  handleSyncEndpoint,
-  handleSyncStatusEndpoint,
+  createSyncEndpoints,
   handleInboxEndpoint,
   handleSearchEndpoint,
   handleEmailDetailsEndpoint,
@@ -39,19 +38,8 @@ const wsHandler = new WebSocketHandler(
   uiStateManager,
   componentManager
 );
-const db = new Database(DATABASE_PATH);
 
-db.run(`
-  CREATE TABLE IF NOT EXISTS sync_metadata (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sync_time TEXT NOT NULL,
-    emails_synced INTEGER DEFAULT 0,
-    emails_skipped INTEGER DEFAULT 0,
-    sync_type TEXT DEFAULT 'manual'
-  )
-`);
-
-// Initialize Listeners Manager with IMAP, Database, and UIState dependencies
+// Initialize Listeners Manager with IMAP, Database, and 
 const listenersManager = new ListenersManager(
   (notification) => {
     // Notification callback - will be used when listeners execute
@@ -67,8 +55,11 @@ const listenersManager = new ListenersManager(
   uiStateManager
 );
 
-// Initialize EmailSyncService with listenersManager
-const syncService = new EmailSyncService(DATABASE_PATH, listenersManager);
+// Initialize EmailSyncService with dbManager and listenersManager
+const syncService = new EmailSyncService(dbManager, listenersManager);
+
+// Create sync endpoint handlers with injected dependencies
+const { handleSyncEndpoint, handleSyncStatusEndpoint } = createSyncEndpoints(dbManager, syncService);
 
 // Initialize listeners, actions, and IDLE monitoring asynchronously
 (async () => {

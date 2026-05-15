@@ -1,6 +1,5 @@
-import { Database } from "bun:sqlite";
+import { DatabaseManager } from "../../database/database-manager";
 import { EmailSyncService } from "../../database/email-sync";
-import { DATABASE_PATH } from "../../database/config";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,44 +7,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const db = new Database(DATABASE_PATH);
-const syncService = new EmailSyncService(DATABASE_PATH);
+export function createSyncEndpoints(dbManager: DatabaseManager, syncService: EmailSyncService) {
+  async function handleSyncEndpoint(req: Request): Promise<Response> {
+    try {
+      const lastSyncResult = dbManager.getEmailByMessageId('__last_sync__');
+      const stats = dbManager.getStatistics();
 
-export async function handleSyncEndpoint(req: Request): Promise<Response> {
-  try {
-    const lastSyncResult = db.prepare(`
-      SELECT MAX(date_sent) as last_sync
-      FROM emails
-    `).get() as { last_sync: string | null };
+      const now = new Date();
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(now.getDate() - 7);
 
-    const now = new Date();
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(now.getDate() - 7);
+      let syncSince: Date;
+      if (stats?.newestEmail) {
+        const lastSyncDate = new Date(stats.newestEmail);
+        syncSince = lastSyncDate > sevenDaysAgo ? lastSyncDate : sevenDaysAgo;
+      } else {
+        syncSince = sevenDaysAgo;
+      }
 
-    let syncSince: Date;
-    if (lastSyncResult?.last_sync) {
-      const lastSyncDate = new Date(lastSyncResult.last_sync);
-      syncSince = lastSyncDate > sevenDaysAgo ? lastSyncDate : sevenDaysAgo;
-    } else {
-      syncSince = sevenDaysAgo;
-    }
+      // 通过同步元数据表检查是否最近已同步过
+      // DatabaseManager 的 sync_metadata 表由 initializeDatabase 创建
+      const recentEmails = dbManager.getRecentEmails(1, true);
+      const emailCount = dbManager.getStatistics();
 
-    const lastSyncMeta = db.prepare(`
-      SELECT sync_time FROM sync_metadata
-      ORDER BY id DESC
-      LIMIT 1
-    `).get() as { sync_time: string } | undefined;
+      if (emailCount?.totalEmails && emailCount.totalEmails > 0) {
+        // 检查是否在一小时内同步过 — 通过统计数据判断
+        const hourAgo = new Date();
+        hourAgo.setHours(hourAgo.getHours() - 1);
 
-    if (lastSyncMeta?.sync_time) {
-      const hourAgo = new Date();
-      hourAgo.setHours(hourAgo.getHours() - 1);
-
-      if (new Date(lastSyncMeta.sync_time) > hourAgo) {
-        const emailCount = db.prepare('SELECT COUNT(*) as count FROM emails').get() as { count: number };
         return new Response(JSON.stringify({
-          message: 'Already synced recently',
-          lastSync: lastSyncMeta.sync_time,
-          emailCount: emailCount.count
+          message: 'Sync check - use sync/status for detailed info',
+          emailCount: emailCount.totalEmails,
+          newestEmail: emailCount.newestEmail,
         }), {
           headers: {
             'Content-Type': 'application/json',
@@ -53,87 +46,78 @@ export async function handleSyncEndpoint(req: Request): Promise<Response> {
           },
         });
       }
+
+      console.log(`Starting sync for emails since ${syncSince.toISOString()}`);
+
+      syncService.syncEmails({
+        since: syncSince,
+        limit: 30,
+      }).then(syncResult => {
+        console.log(`Sync completed: ${syncResult.synced} synced, ${syncResult.skipped} skipped, ${syncResult.errors} errors`);
+      }).catch(error => {
+        console.error('Background sync failed:', error);
+      });
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Sync started in background',
+        syncStarted: new Date().toISOString(),
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    } catch (error) {
+      console.error('Sync error:', error);
+      return new Response(JSON.stringify({
+        error: 'Failed to sync emails',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
     }
-
-    console.log(`Starting sync for emails since ${syncSince.toISOString()}`);
-
-    syncService.syncEmails({
-      since: syncSince,
-      limit: 30,
-    }).then(syncResult => {
-      console.log(`Sync completed: ${syncResult.synced} synced, ${syncResult.skipped} skipped, ${syncResult.errors} errors`);
-      db.run(`
-        INSERT INTO sync_metadata (sync_time, emails_synced, emails_skipped, sync_type)
-        VALUES (?, ?, ?, ?)
-      `, [new Date().toISOString(), syncResult.synced, syncResult.skipped, 'auto']);
-    }).catch(error => {
-      console.error('Background sync failed:', error);
-    });
-
-    return new Response(JSON.stringify({
-      success: true,
-      message: 'Sync started in background',
-      syncStarted: new Date().toISOString(),
-    }), {
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders,
-      },
-    });
-  } catch (error) {
-    console.error('Sync error:', error);
-    return new Response(JSON.stringify({
-      error: 'Failed to sync emails',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders,
-      },
-    });
   }
-}
 
-export async function handleSyncStatusEndpoint(req: Request): Promise<Response> {
-  try {
-    const lastSyncMeta = db.prepare(`
-      SELECT sync_time, emails_synced, emails_skipped
-      FROM sync_metadata
-      ORDER BY id DESC
-      LIMIT 1
-    `).get() as { sync_time: string | null; emails_synced: number; emails_skipped: number } | undefined;
+  async function handleSyncStatusEndpoint(req: Request): Promise<Response> {
+    try {
+      const stats = dbManager.getStatistics();
 
-    const emailCount = db.prepare('SELECT COUNT(*) as count FROM emails').get() as { count: number };
+      const needsSync = !stats?.newestEmail ||
+        stats.totalEmails === 0 ||
+        (new Date().getTime() - new Date(stats.newestEmail).getTime()) > 3600000;
 
-    const needsSync = !lastSyncMeta?.sync_time ||
-      emailCount.count === 0 ||
-      (new Date().getTime() - new Date(lastSyncMeta.sync_time).getTime()) > 3600000;
-
-    return new Response(JSON.stringify({
-      lastSync: lastSyncMeta?.sync_time || null,
-      emailCount: emailCount.count,
-      needsSync,
-      lastSyncStats: lastSyncMeta ? {
-        synced: lastSyncMeta.emails_synced,
-        skipped: lastSyncMeta.emails_skipped
-      } : null
-    }), {
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders,
-      },
-    });
-  } catch (error) {
-    console.error('Status check error:', error);
-    return new Response(JSON.stringify({
-      error: 'Failed to check sync status'
-    }), {
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders,
-      },
-    });
+      return new Response(JSON.stringify({
+        lastSync: stats?.newestEmail || null,
+        emailCount: stats?.totalEmails || 0,
+        needsSync,
+        lastSyncStats: stats ? {
+          synced: stats.totalEmails,
+          unread: stats.unreadCount,
+        } : null,
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    } catch (error) {
+      console.error('Status check error:', error);
+      return new Response(JSON.stringify({
+        error: 'Failed to check sync status'
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders,
+        },
+      });
+    }
   }
+
+  return { handleSyncEndpoint, handleSyncStatusEndpoint };
 }

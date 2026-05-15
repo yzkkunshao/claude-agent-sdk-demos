@@ -1,4 +1,4 @@
-export { handleSyncEndpoint, handleSyncStatusEndpoint } from './sync';
+export { createSyncEndpoints } from './sync';
 export { handleInboxEndpoint, handleSearchEndpoint, handleEmailDetailsEndpoint, handleBatchEmailsEndpoint } from './emails';
 export { handleListenerDetailsEndpoint } from './listeners';
 export {
