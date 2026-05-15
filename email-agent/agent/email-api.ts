@@ -32,13 +32,13 @@ interface SearchCriteria {
   folders?: string[];
   labels?: string[];
   limit?: number;
-  gmailQuery?: string;  // Gmail-specific native search syntax (e.g., "from:me (address OR birthday)")
+  gmailQuery?: string;  // TODO 系统当前只支持这种传参Gmail 风格查询语法，兼容非 Gmail 服务器 (e.g., "from:me newer_than:3d")
 }
 
 class EmailAPI {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://0.0.0.0:3000') {
+  constructor(baseUrl: string = 'http://localhost:3000') {
     this.baseUrl = baseUrl;
   }
 

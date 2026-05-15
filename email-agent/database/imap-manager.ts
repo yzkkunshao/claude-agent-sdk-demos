@@ -142,16 +142,96 @@ export class ImapManager {
     });
   }
 
+  // 将 Gmail 查询语法解析为标准 IMAP 搜索条件（兼容非 Gmail 服务器）
+  private parseGmailQueryToImapCriteria(query: string): any[] {
+    const criteria: any[] = [];
+    const tokens = query.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+
+    for (const token of tokens) {
+      const lower = token.toLowerCase();
+
+      // newer_than:Nd / newer_than:Nm / newer_than:Ny → SINCE
+      const newerMatch = lower.match(/^newer_than:(\d+)([dmy])$/);
+      if (newerMatch) {
+        const value = parseInt(newerMatch[1]);
+        const unit = newerMatch[2];
+        const date = new Date();
+        if (unit === 'd') date.setDate(date.getDate() - value);
+        else if (unit === 'm') date.setMonth(date.getMonth() - value);
+        else if (unit === 'y') date.setFullYear(date.getFullYear() - value);
+        date.setHours(0, 0, 0, 0);
+        criteria.push(['SINCE', date]);
+        continue;
+      }
+
+      // older_than:Nd / older_than:Nm / older_than:Ny → BEFORE
+      const olderMatch = lower.match(/^older_than:(\d+)([dmy])$/);
+      if (olderMatch) {
+        const value = parseInt(olderMatch[1]);
+        const unit = olderMatch[2];
+        const date = new Date();
+        if (unit === 'd') date.setDate(date.getDate() - value);
+        else if (unit === 'm') date.setMonth(date.getMonth() - value);
+        else if (unit === 'y') date.setFullYear(date.getFullYear() - value);
+        date.setHours(0, 0, 0, 0);
+        criteria.push(['BEFORE', date]);
+        continue;
+      }
+
+      // from:value → FROM
+      if (lower.startsWith('from:')) {
+        const value = token.substring(5).replace(/^"|"$/g, '');
+        if (value === 'me') {
+          // "from:me" 需要结合已发送文件夹搜索，此处跳过让上层处理
+          continue;
+        }
+        criteria.push(['FROM', value]);
+        continue;
+      }
+
+      // to:value → TO
+      if (lower.startsWith('to:')) {
+        const value = token.substring(3).replace(/^"|"$/g, '');
+        criteria.push(['TO', value]);
+        continue;
+      }
+
+      // subject:value → SUBJECT
+      if (lower.startsWith('subject:')) {
+        const value = token.substring(8).replace(/^"|"$/g, '');
+        criteria.push(['SUBJECT', value]);
+        continue;
+      }
+
+      // is:unread / is:read
+      if (lower === 'is:unread') { criteria.push('UNSEEN'); continue; }
+      if (lower === 'is:read') { criteria.push('SEEN'); continue; }
+
+      // has:attachment — 标准 IMAP 无直接等价，跳过
+      if (lower === 'has:attachment') continue;
+
+      // OR / AND / 括号等复杂语法 — 忽略操作符
+      if (['or', 'and'].includes(lower)) continue;
+      if (token === '(' || token === ')') continue;
+
+      // 剩余纯文本 → TEXT 搜索
+      const cleaned = token.replace(/^"|"$/g, '');
+      if (cleaned) {
+        criteria.push(['TEXT', cleaned]);
+      }
+    }
+
+    return criteria.length > 0 ? criteria : ['ALL'];
+  }
+
   // Convert SearchCriteria to IMAP search array
   private buildImapSearchCriteria(criteria: SearchCriteria): any[] {
     const searchCriteria: any[] = [];
 
-    // PRIORITY: If gmailQuery is provided, use Gmail's native search syntax (X-GM-RAW)
-    // This allows using Gmail's powerful search operators like OR, has:attachment, etc.
+    // 解析 Gmail 风格查询语法为标准 IMAP 条件（兼容 QQ 邮箱等非 Gmail 服务器）
     if (criteria.gmailQuery) {
-      console.log('📧 Using Gmail native search syntax:', criteria.gmailQuery);
-      searchCriteria.push(['X-GM-RAW', criteria.gmailQuery]);
-      return searchCriteria;  // Return early, ignore other criteria when using Gmail syntax
+      console.log('📧 Parsing Gmail-style query:', criteria.gmailQuery);
+      return this.parseGmailQueryToImapCriteria(criteria.gmailQuery);
     }
 
     if (criteria.query) {

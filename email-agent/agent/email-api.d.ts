@@ -80,9 +80,10 @@ export interface SearchCriteria {
   /** Maximum email size in bytes */
   maxSize?: number;
   /**
-   * Gmail-specific native search syntax using X-GM-RAW
-   * Supports all Gmail search operators like OR, has:attachment, is:unread, etc.
-   * Example: "from:me (address OR birthday OR phone)"
+   * Gmail 风格查询语法（解析为标准 IMAP 条件，兼容所有邮箱服务器）
+   * 支持的操作符：from:, to:, subject:, newer_than:Nd/Nm/Ny, older_than:Nd/Nm/Ny, is:unread, is:read
+   * 纯文本会搜索邮件正文。不支持：OR/AND 布尔操作符、has:attachment、括号分组
+   * Example: "from:me subject:invoice newer_than:3d"
    * If provided, this takes priority over other search criteria
    */
   gmailQuery?: string;
@@ -133,15 +134,16 @@ export declare class EmailAPI {
   searchEmails(criteria: SearchCriteria): Promise<EmailMessage[]>;
 
   /**
-   * Search emails using Gmail's native query syntax
-   * Supports all Gmail operators: OR, has:attachment, from:me, newer_than:, etc.
-   * Automatically searches in Sent Mail folder when using from:me
-   * @param query - Gmail query string (e.g., 'from:me (address OR phone) newer_than:2y')
+   * Search emails using Gmail-style query syntax (解析为标准 IMAP 条件，兼容所有邮箱)
+   * Supported operators: from:, to:, subject:, newer_than:Nd/Nm/Ny, older_than:Nd/Nm/Ny, is:unread, is:read
+   * Pure text searches email body. Does NOT support: OR/AND, has:attachment, parentheses grouping.
+   * Automatically searches in Sent folder when using from:me
+   * @param query - Gmail-style query string (e.g., 'from:me subject:invoice newer_than:3d')
    * @param options - Additional options like headersOnly and limit
    * @returns Promise resolving to array of matching email messages
    * @example
    * const results = await api.searchWithGmailQuery(
-   *   'from:me ("address" OR "city") newer_than:2y',
+   *   'from:me subject:invoice newer_than:3d',
    *   { limit: 50 }
    * );
    */

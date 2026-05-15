@@ -27,11 +27,11 @@ export const customServer = createSdkMcpServer({
   tools: [
     tool(
       "search_inbox",
-      "Search emails in the inbox using Gmail query syntax",
+      "Search emails in the inbox",
       {
-        gmailQuery: z.string().describe(`Gmail query string (e.g., 'from:example@gmail.com subject:invoice')
-          or
-          'from:me ("address" OR "street") newer_than:1y`
+        gmailQuery: z.string().describe(`Email search query (e.g., 'from:example@mail.com subject:invoice newer_than:3d').
+          Supported operators: from:, to:, subject:, newer_than:Nd/Nm/Ny, older_than:Nd/Nm/Ny, is:unread, is:read.
+          Plain text searches email body and subject.`
         ),
       },
       async (args) => {
