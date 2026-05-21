@@ -54,6 +54,21 @@ const App: React.FC = () => {
           setMessages(prev => [...prev, assistantMsg]);
           setIsLoading(false);
           break;
+        case 'action_instances':
+          setMessages(prev => {
+            const updated = [...prev];
+            for (let i = updated.length - 1; i >= 0; i--) {
+              if (updated[i].type === 'assistant') {
+                updated[i] = {
+                  ...updated[i],
+                  actions: [...(updated[i].actions || []), ...(message.actions || [])],
+                };
+                break;
+              }
+            }
+            return updated;
+          });
+          break;
         case 'tool_use':
           const toolMsg = {
             id: Date.now().toString() + '-tool',

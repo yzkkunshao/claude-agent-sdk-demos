@@ -137,7 +137,7 @@ export class WebSocketHandler {
     }
 
     const newSessionId = sessionId || this.generateSessionId();
-    const session = new Session(newSessionId, this.db);
+    const session = new Session(newSessionId, this.db, this.actionsManager);
     this.sessions.set(newSessionId, session);
     return session;
   }

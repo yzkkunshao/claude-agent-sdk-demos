@@ -2,6 +2,8 @@ import { Database } from "bun:sqlite";
 import * as path from "path";
 import type { WSClient, SDKMessage } from "./types";
 import { AIClient } from "./ai-client";
+import type { ActionsManager } from "./actions-manager";
+import type { ActionInstance } from "../agent/custom_scripts/types";
 
 // Session class to manage a single Claude conversation
 export class Session {
@@ -12,11 +14,13 @@ export class Session {
   private messageCount = 0;
   private aiClient: AIClient;
   private sdkSessionId: string | null = null;
+  private actionsManager?: ActionsManager;
 
-  constructor(id: string, db: Database) {
+  constructor(id: string, db: Database, actionsManager?: ActionsManager) {
     this.id = id;
     this.db = db;
     this.aiClient = new AIClient();
+    this.actionsManager = actionsManager;
   }
 
   // Process a single user message
@@ -94,8 +98,12 @@ export class Session {
           content: content,
           sessionId: this.id
         };
+        this.broadcast(wsMessage);
+        this.processActionsFromText(content);
+        return;
       } else if (Array.isArray(content)) {
         // Handle content blocks
+        let collectedText = '';
         for (const block of content) {
           if (block.type === 'text') {
             wsMessage = {
@@ -103,6 +111,7 @@ export class Session {
               content: block.text,
               sessionId: this.id
             };
+            collectedText += block.text + '\n';
           } else if (block.type === 'tool_use') {
             wsMessage = {
               type: 'tool_use',
@@ -123,6 +132,9 @@ export class Session {
           if (wsMessage) {
             this.broadcast(wsMessage);
           }
+        }
+        if (collectedText.trim()) {
+          this.processActionsFromText(collectedText);
         }
         return; // Already broadcasted block by block
       }
@@ -199,5 +211,76 @@ export class Session {
   endConversation() {
     this.sdkSessionId = null;
     this.queryPromise = null;
+  }
+
+  /**
+   * 从 agent 文本响应中提取 actions JSON，注册实例并广播到前端
+   * 支持两种格式：
+   * 1. ```json 代码块中含 "actions" 键
+   * 2. 行内 {"actions": [...]} JSON
+   */
+  private processActionsFromText(text: string) {
+    if (!this.actionsManager) return;
+
+    const actionDefs = this.parseActionsFromText(text);
+    if (actionDefs.length === 0) return;
+
+    const instances: ActionInstance[] = actionDefs.map((def: any) => {
+      const instance: ActionInstance = {
+        instanceId: `act_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        templateId: def.templateId,
+        label: def.label || def.templateId,
+        description: def.description,
+        params: def.params || {},
+        style: def.style || "primary",
+        sessionId: this.id,
+        createdAt: new Date().toISOString(),
+      };
+
+      this.actionsManager!.registerInstance(instance);
+      return instance;
+    });
+
+    console.log(`[Session] Parsed and registered ${instances.length} action instance(s)`);
+
+    this.broadcast({
+      type: 'action_instances',
+      actions: instances,
+      sessionId: this.id,
+    });
+  }
+
+  /**
+   * 正则解析 agent 文本中的 actions JSON 定义
+   * 匹配 ```json 代码块 或 行内 JSON 中含 "actions" 数组的结构
+   */
+  private parseActionsFromText(text: string): any[] {
+    const allActions: any[] = [];
+
+    // 匹配 ```json ... ``` 代码块
+    const codeBlockRegex = /```json\s*\n([\s\S]*?)\n```/g;
+    let match;
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      this.tryExtractActions(match[1], allActions);
+    }
+
+    // 匹配行内 {"actions": [...]}
+    const inlineRegex = /\{"actions"\s*:\s*\[[\s\S]*?\]\s*\}/g;
+    while ((match = inlineRegex.exec(text)) !== null) {
+      this.tryExtractActions(match[0], allActions);
+    }
+
+    return allActions;
+  }
+
+  private tryExtractActions(jsonStr: string, collector: any[]) {
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.actions && Array.isArray(parsed.actions)) {
+        collector.push(...parsed.actions);
+      }
+    } catch {
+      // 非法 JSON 忽略
+    }
   }
 }

@@ -180,8 +180,8 @@ export class DatabaseManager {
           toAddresses, ccAddresses
         )
         VALUES (
-          NEW.messageId, NEW.subject, NEW.fromAddress, NEW.fromName,
-          NEW.bodyText, NEW.toAddresses, NEW.ccAddresses
+          NEW.message_id, NEW.subject, NEW.from_address, NEW.from_name,
+          NEW.body_text, NEW.to_addresses, NEW.cc_addresses
         );
       END
     `);
@@ -192,12 +192,12 @@ export class DatabaseManager {
       BEGIN
         UPDATE emails_fts
         SET subject = NEW.subject,
-            from_address = NEW.from_address,
-            from_name = NEW.from_name,
-            body_text = NEW.body_text,
-            to_addresses = NEW.to_addresses,
-            cc_addresses = NEW.cc_addresses
-        WHERE message_id = NEW.message_id;
+            fromAddress = NEW.from_address,
+            fromName = NEW.from_name,
+            bodyText = NEW.body_text,
+            toAddresses = NEW.to_addresses,
+            ccAddresses = NEW.cc_addresses
+        WHERE messageId = NEW.message_id;
       END
     `);
 
